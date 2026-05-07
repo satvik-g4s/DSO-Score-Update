@@ -16,7 +16,7 @@ uploaded_file = st.file_uploader(
 
 st.caption("Required Columns: Cluster, Customer Code, DSO")
 
-selected_date = st.date_input("Select Date(Select any date in the month of current DSO")
+selected_date = st.date_input("Select Date (Select any date in the month of current DSO)")
 
 run = st.button("Run")
 
