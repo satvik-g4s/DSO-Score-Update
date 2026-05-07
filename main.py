@@ -1,0 +1,443 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import psycopg2
+import time
+from supabase import create_client
+
+st.set_page_config(layout="wide")
+
+st.title("DSO Score Upload")
+
+uploaded_file = st.file_uploader(
+    "Upload CSV File",
+    type=["csv"]
+)
+
+st.caption("Required Columns: Cluster, Customer Code, DSO")
+
+selected_date = st.date_input("Select Date")
+
+run = st.button("Run")
+
+log_container = st.container()
+
+if run:
+
+    with log_container:
+
+        if uploaded_file is None:
+            st.error("Please upload the CSV file.")
+            st.stop()
+
+        try:
+            st.info("Initializing Supabase connection...")
+
+            url = st.secrets["SUPABASE_URL"]
+            key = st.secrets["SUPABASE_KEY"]
+
+            supabase = create_client(url, key)
+
+        except Exception as e:
+            st.error(f"Error connecting to Supabase: {e}")
+            st.stop()
+
+        try:
+            st.info("Preparing date variables...")
+
+            date_variable = pd.to_datetime(selected_date)
+
+            monthh = date_variable.month
+            yearr = date_variable.year
+
+            new_col = f"DSO_{monthh}_{yearr}"
+            bucket_col = f"Bucket_{monthh}_{yearr}"
+            impact_col = f"Impact_{monthh}_{yearr}"
+
+        except Exception as e:
+            st.error(f"Error preparing date variables: {e}")
+            st.stop()
+
+        try:
+            st.info("Fetching existing records from Supabase...")
+
+            all_rows = []
+
+            for start in range(0, 100000, 1000):
+
+                response = (
+                    supabase
+                    .table("DSO_SCORE")
+                    .select('"key","Bucket_12_2025","Total Score"')
+                    .range(start, start + 999)
+                    .execute()
+                )
+
+                if not response.data:
+                    break
+
+                all_rows.extend(response.data)
+
+            sql_df = pd.DataFrame(all_rows)
+
+        except Exception as e:
+            st.error(f"Error fetching data from Supabase: {e}")
+            st.stop()
+
+        try:
+            st.info("Reading uploaded CSV file...")
+
+            DSO = pd.read_csv(uploaded_file, index_col=False)
+
+        except Exception as e:
+            st.error(f"Error reading CSV file: {e}")
+            st.stop()
+
+        try:
+            st.info("Validating required columns...")
+
+            required_columns = [
+                "Cluster",
+                "Customer Code",
+                "DSO"
+            ]
+
+            missing_columns = [
+                col for col in required_columns
+                if col not in DSO.columns
+            ]
+
+            if missing_columns:
+                st.error(f"Missing columns: {missing_columns}")
+                st.stop()
+
+        except Exception as e:
+            st.error(f"Error during column validation: {e}")
+            st.stop()
+
+        try:
+            st.info("Cleaning and preparing DSO data...")
+
+            DSO["Customer Code"] = DSO["Customer Code"].astype(int).astype(str)
+            DSO["Cluster"] = DSO["Cluster"].astype(str)
+
+            DSO["key"] = DSO["Customer Code"] + DSO["Cluster"]
+
+            DSO.rename(columns={"DSO": new_col}, inplace=True)
+
+            DSO = DSO[["key", new_col]]
+
+        except Exception as e:
+            st.error(f"Error during DSO preprocessing: {e}")
+            st.stop()
+
+        try:
+            st.info("Merging data...")
+
+            sql_df = pd.merge(
+                sql_df,
+                DSO,
+                on="key",
+                how="left"
+            )
+
+        except Exception as e:
+            st.error(f"Error during merge: {e}")
+            st.stop()
+
+        try:
+            st.info("Creating DSO buckets...")
+
+            def create_bucket(dso):
+
+                if pd.isna(dso):
+                    return None
+
+                elif dso <= 45:
+                    return "< 45 days"
+
+                elif dso <= 60:
+                    return "46-60 days"
+
+                elif dso <= 90:
+                    return "61-90 days"
+
+                else:
+                    return "> 90 days"
+
+            sql_df[bucket_col] = sql_df[new_col].apply(create_bucket)
+
+        except Exception as e:
+            st.error(f"Error while creating buckets: {e}")
+            st.stop()
+
+        try:
+            st.info("Calculating impact scores...")
+
+            def calculate_impact(old_bucket, new_bucket):
+
+                impact_matrix = {
+
+                    ("< 45 days", "< 45 days"): 5,
+                    ("< 45 days", "46-60 days"): -20,
+                    ("< 45 days", "61-90 days"): -50,
+                    ("< 45 days", "> 90 days"): -75,
+
+                    ("46-60 days", "< 45 days"): 5,
+                    ("46-60 days", "46-60 days"): 0,
+                    ("46-60 days", "61-90 days"): -50,
+                    ("46-60 days", "> 90 days"): -75,
+
+                    ("61-90 days", "< 45 days"): 50,
+                    ("61-90 days", "46-60 days"): 5,
+                    ("61-90 days", "61-90 days"): -20,
+                    ("61-90 days", "> 90 days"): -75,
+
+                    ("> 90 days", "< 45 days"): 75,
+                    ("> 90 days", "46-60 days"): 50,
+                    ("> 90 days", "61-90 days"): 0,
+                    ("> 90 days", "> 90 days"): -75,
+                }
+
+                return impact_matrix.get((old_bucket, new_bucket), None)
+
+            old_bucket = "Bucket_12_2025"
+
+            sql_df[impact_col] = sql_df.apply(
+                lambda row: calculate_impact(
+                    row[old_bucket],
+                    row[bucket_col]
+                ),
+                axis=1
+            )
+
+        except Exception as e:
+            st.error(f"Error calculating impact scores: {e}")
+            st.stop()
+
+        try:
+            st.info("Updating total scores...")
+
+            sql_df["Total Score"] = (
+                sql_df["Total Score"] + sql_df[impact_col]
+            )
+
+        except Exception as e:
+            st.error(f"Error updating total score: {e}")
+            st.stop()
+
+        try:
+            st.info("Formatting output columns...")
+
+            sql_df = sql_df.replace({np.nan: None})
+
+            sql_df[impact_col] = (
+                sql_df[impact_col]
+                .fillna(0)
+                .astype(int)
+            )
+
+            sql_df["Total Score"] = (
+                sql_df["Total Score"]
+                .fillna(0)
+                .astype(int)
+            )
+
+            sql_df[new_col] = (
+                pd.to_numeric(
+                    sql_df[new_col],
+                    errors="coerce"
+                )
+            )
+
+            sql_df[bucket_col] = (
+                sql_df[bucket_col]
+                .fillna("")
+                .astype(str)
+            )
+
+        except Exception as e:
+            st.error(f"Error formatting columns: {e}")
+            st.stop()
+
+        try:
+            st.info("Connecting to PostgreSQL...")
+
+            conn = psycopg2.connect(
+                host=st.secrets["PG_HOST"],
+                database=st.secrets["PG_DATABASE"],
+                user=st.secrets["PG_USER"],
+                password=st.secrets["PG_PASSWORD"],
+                port=st.secrets["PG_PORT"]
+            )
+
+            cur = conn.cursor()
+
+            st.success("Connected to PostgreSQL")
+
+        except Exception as e:
+            st.error(f"Error connecting to PostgreSQL: {e}")
+            st.stop()
+
+        try:
+            st.info("Creating columns if not exists...")
+
+            query = f'''
+            ALTER TABLE "DSO_SCORE"
+            ADD COLUMN IF NOT EXISTS "{new_col}" NUMERIC;
+
+            ALTER TABLE "DSO_SCORE"
+            ADD COLUMN IF NOT EXISTS "{bucket_col}" TEXT;
+
+            ALTER TABLE "DSO_SCORE"
+            ADD COLUMN IF NOT EXISTS "{impact_col}" INTEGER;
+            '''
+
+            cur.execute(query)
+
+            conn.commit()
+
+            st.success("Columns Created")
+
+        except Exception as e:
+            st.error(f"Error creating columns: {e}")
+            cur.close()
+            conn.close()
+            st.stop()
+
+        try:
+            st.info("Preparing upload records...")
+
+            records = sql_df[
+                sql_df[new_col].notna()
+            ][[
+                "key",
+                "Total Score",
+                new_col,
+                bucket_col,
+                impact_col
+            ]].to_dict(orient="records")
+
+        except Exception as e:
+            st.error(f"Error preparing upload records: {e}")
+            cur.close()
+            conn.close()
+            st.stop()
+
+        try:
+            st.info("Uploading data to Supabase...")
+
+            batch_size = 500
+
+            progress_bar = st.progress(0)
+
+            total_batches = max(1, len(range(0, len(records), batch_size)))
+
+            current_batch = 0
+
+            for i in range(0, len(records), batch_size):
+
+                batch = records[i:i + batch_size]
+
+                response = (
+                    supabase
+                    .table("DSO_SCORE")
+                    .upsert(
+                        batch,
+                        on_conflict="key"
+                    )
+                    .execute()
+                )
+
+                current_batch += 1
+
+                progress = current_batch / total_batches
+
+                progress_bar.progress(progress)
+
+                st.info(f"{i} rows uploaded")
+
+            st.success("Upload Complete")
+
+        except Exception as e:
+            st.error(f"Error during upload: {e}")
+            cur.close()
+            conn.close()
+            st.stop()
+
+        try:
+            st.info("Closing database connection...")
+
+            cur.close()
+
+            time.sleep(5)
+
+            conn.close()
+
+            st.success("Connection Closed")
+
+        except Exception as e:
+            st.error(f"Error closing connection: {e}")
+            st.stop()
+
+        csv_output = sql_df.to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+            label="Download Report",
+            data=csv_output,
+            file_name="dso_score_output.csv",
+            mime="text/csv"
+        )
+
+with st.expander("What This Tool Does"):
+
+    st.markdown("""
+    - Uploads latest customer DSO data
+    - Creates DSO bucket classifications
+    - Calculates customer movement impact
+    - Updates total score values
+    - Pushes updated records into Supabase
+    """)
+
+with st.expander("How to Use"):
+
+    st.markdown("""
+    1. Upload the CSV input file
+    2. Ensure required columns are available
+    3. Select the reporting date
+    4. Click Run
+    5. Download processed output after completion
+    """)
+
+with st.expander("Output Details"):
+
+    st.markdown("""
+    Output includes:
+
+    - Customer key
+    - Updated DSO value
+    - New DSO bucket
+    - Impact score
+    - Updated Total Score
+    """)
+
+with st.expander("Financial Logic"):
+
+    st.markdown("""
+    ### Bucket Classification
+
+    - < 45 days
+    - 46–60 days
+    - 61–90 days
+    - > 90 days
+
+    ### Impact Logic
+
+    Customers moving to better buckets receive positive impact.
+
+    Customers moving to worse buckets receive negative impact.
+
+    ### Total Score Formula
+
+    Total Score = Existing Total Score + Impact Score
+    """)
