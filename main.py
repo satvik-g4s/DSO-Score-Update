@@ -296,7 +296,7 @@ if run:
             cur.execute(query)
 
             conn.commit()
-
+            time.sleep(10)
             st.success("Columns Created")
 
         except Exception as e:
