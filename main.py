@@ -383,14 +383,56 @@ if run:
             st.error(f"Error closing connection: {e}")
             st.stop()
 
-        csv_output = sql_df.to_csv(index=False).encode("utf-8")
-
-        st.download_button(
-            label="Download Report",
-            data=csv_output,
-            file_name="dso_score_output.csv",
-            mime="text/csv"
-        )
+        try:
+            status_text.info("Preparing final download file...")
+        
+            all_download_rows = []
+        
+            for start in range(0, 100000, 1000):
+        
+                response = (
+                    supabase
+                    .table("DSO_SCORE")
+                    .select("*")
+                    .range(start, start + 999)
+                    .execute()
+                )
+        
+                if not response.data:
+                    break
+        
+                all_download_rows.extend(response.data)
+        
+            download_df = pd.DataFrame(all_download_rows)
+        
+            if "Total Score" in download_df.columns:
+        
+                cols = [
+                    col for col in download_df.columns
+                    if col != "Total Score"
+                ] + ["Total Score"]
+        
+                download_df = download_df[cols]
+        
+                download_df = download_df.sort_values(
+                    by="Total Score",
+                    ascending=False
+                )
+        
+            csv_output = download_df.to_csv(index=False).encode("utf-8")
+        
+            status_text.success("Final Report Ready")
+        
+            st.download_button(
+                label="Download Report",
+                data=csv_output,
+                file_name="dso_score_output.csv",
+                mime="text/csv"
+            )
+        
+        except Exception as e:
+            st.error(f"Error preparing download file: {e}")
+            st.stop()
 
 with st.expander("What This Tool Does"):
 
