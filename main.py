@@ -454,14 +454,20 @@ if run:
             download_df = pd.DataFrame(all_download_rows)
         
             if "Total Score" in download_df.columns:
-        
-                cols = [
-                    col for col in download_df.columns
-                    if col != "Total Score"
-                ] + ["Total Score"]
-        
+
+                cols = download_df.columns.tolist()
+            
+                # remove HUB and Total Score first
+                if "HUB" in cols:
+                    cols.remove("HUB")
+            
+                cols.remove("Total Score")
+            
+                # final ordering
+                cols = ["HUB"] + cols + ["Total Score"]
+            
                 download_df = download_df[cols]
-        
+            
                 download_df = download_df.sort_values(
                     by="Total Score",
                     ascending=False
