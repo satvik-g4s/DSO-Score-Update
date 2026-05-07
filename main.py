@@ -25,13 +25,14 @@ log_container = st.container()
 if run:
 
     with log_container:
+        status_text = st.empty()
 
         if uploaded_file is None:
             st.error("Please upload the CSV file.")
             st.stop()
 
         try:
-            st.info("Initializing Supabase connection...")
+            status_text.info("Initializing Supabase connection...")
 
             url = st.secrets["SUPABASE_URL"]
             key = st.secrets["SUPABASE_KEY"]
@@ -43,7 +44,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Preparing date variables...")
+            status_text.info("Preparing date variables...")
 
             date_variable = pd.to_datetime(selected_date)
 
@@ -59,7 +60,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Fetching existing records from Supabase...")
+            status_text.info("Fetching existing records from Supabase...")
 
             all_rows = []
 
@@ -85,7 +86,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Reading uploaded CSV file...")
+            status_text.info("Reading uploaded CSV file...")
 
             DSO = pd.read_csv(uploaded_file, index_col=False)
 
@@ -94,7 +95,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Validating required columns...")
+            status_text.info("Validating required columns...")
 
             required_columns = [
                 "Cluster",
@@ -116,7 +117,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Cleaning and preparing DSO data...")
+            status_text.info("Cleaning and preparing DSO data...")
 
             DSO["Customer Code"] = DSO["Customer Code"].astype(int).astype(str)
             DSO["Cluster"] = DSO["Cluster"].astype(str)
@@ -132,7 +133,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Merging data...")
+            status_text.info("Merging data...")
 
             sql_df = pd.merge(
                 sql_df,
@@ -146,7 +147,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Creating DSO buckets...")
+            status_text.info("Creating DSO buckets...")
 
             def create_bucket(dso):
 
@@ -172,7 +173,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Calculating impact scores...")
+            status_text.info("Calculating impact scores...")
 
             def calculate_impact(old_bucket, new_bucket):
 
@@ -216,7 +217,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Updating total scores...")
+            status_text.info("Updating total scores...")
 
             sql_df["Total Score"] = (
                 sql_df["Total Score"] + sql_df[impact_col]
@@ -227,7 +228,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Formatting output columns...")
+            status_text.info("Formatting output columns...")
 
             sql_df = sql_df.replace({np.nan: None})
 
@@ -261,7 +262,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Connecting to PostgreSQL...")
+            status_text.info("Connecting to PostgreSQL...")
 
             conn = psycopg2.connect(
                 host=st.secrets["PG_HOST"],
@@ -273,14 +274,14 @@ if run:
 
             cur = conn.cursor()
 
-            st.success("Connected to PostgreSQL")
+            status_text.success("Connected to PostgreSQL")
 
         except Exception as e:
             st.error(f"Error connecting to PostgreSQL: {e}")
             st.stop()
 
         try:
-            st.info("Creating columns if not exists...")
+            status_text.info("Creating columns if not exists...")
 
             query = f'''
             ALTER TABLE "DSO_SCORE"
@@ -297,7 +298,7 @@ if run:
 
             conn.commit()
             time.sleep(10)
-            st.success("Columns Created")
+            status_text.success("Columns Created")
 
         except Exception as e:
             st.error(f"Error creating columns: {e}")
@@ -306,7 +307,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Preparing upload records...")
+            status_text.info("Preparing upload records...")
 
             records = sql_df[
                 sql_df[new_col].notna()
@@ -325,7 +326,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Uploading data to Supabase...")
+            status_text.info("Uploading data to Supabase...")
 
             batch_size = 500
 
@@ -355,9 +356,11 @@ if run:
 
                 progress_bar.progress(progress)
 
-                st.info(f"{i} rows uploaded")
+                status_text.info(
+                    f"Uploading Batch {current_batch} of {total_batches}"
+                )
 
-            st.success("Upload Complete")
+            status_text.success("Upload Complete")
 
         except Exception as e:
             st.error(f"Error during upload: {e}")
@@ -366,7 +369,7 @@ if run:
             st.stop()
 
         try:
-            st.info("Closing database connection...")
+            status_text.info("Closing database connection...")
 
             cur.close()
 
@@ -374,7 +377,7 @@ if run:
 
             conn.close()
 
-            st.success("Connection Closed")
+            status_text.success("Connection Closed")
 
         except Exception as e:
             st.error(f"Error closing connection: {e}")
