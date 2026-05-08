@@ -128,7 +128,12 @@ def calculate_range(old_bucket, current_dso):
             return "Out Range"
 
     elif old_bucket == "> 90 days":
-        return "In Range"
+
+        if current_dso < 91:
+            return "In Range"
+    
+        else:
+            return "Out Range"
 
     return ""
 
