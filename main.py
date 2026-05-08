@@ -453,7 +453,7 @@ if run:
             conn.commit()
 
             status_text.success("Column Ready")
-            time.sleep(0.5)
+            time.sleep(7)
 
         except Exception as e:
 
