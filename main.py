@@ -137,7 +137,7 @@ if run:
         try:
 
             status_text.info("Initializing Supabase connection...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             url = st.secrets["SUPABASE_URL"]
             key = st.secrets["SUPABASE_KEY"]
@@ -156,7 +156,7 @@ if run:
         try:
 
             status_text.info("Preparing date variables...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             date_variable = pd.to_datetime(selected_date)
 
@@ -210,7 +210,7 @@ if run:
         try:
 
             status_text.info("Reading uploaded CSV file...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             DSO = pd.read_csv(uploaded_file, index_col=False)
 
@@ -226,7 +226,7 @@ if run:
         try:
 
             status_text.info("Validating required columns...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             required_columns = [
                 "Cluster",
@@ -256,7 +256,7 @@ if run:
         try:
 
             status_text.info("Cleaning and preparing DSO data...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             DSO["Customer Code"] = (
                 DSO["Customer Code"]
@@ -298,7 +298,7 @@ if run:
         try:
 
             status_text.info("Merging data...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             sql_df = pd.merge(
                 sql_df,
@@ -319,7 +319,7 @@ if run:
         try:
 
             status_text.info("Calculating movement impact...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             temp_old_bucket = "temp_old_bucket"
             temp_new_bucket = "temp_new_bucket"
@@ -360,7 +360,7 @@ if run:
         try:
 
             status_text.info("Updating total scores...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             sql_df["Total Score"] = (
                 sql_df["Total Score"]
@@ -391,7 +391,7 @@ if run:
         try:
 
             status_text.info("Formatting data...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             sql_df[new_col] = (
                 pd.to_numeric(
@@ -414,7 +414,7 @@ if run:
         try:
 
             status_text.info("Connecting to Database...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             conn = psycopg2.connect(
                 host=st.secrets["PG_HOST"],
@@ -427,7 +427,7 @@ if run:
             cur = conn.cursor()
 
             status_text.success("Connected to Database")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
         except Exception as e:
 
@@ -441,7 +441,7 @@ if run:
         try:
 
             status_text.info("Creating DSO column if not exists...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             query = f'''
             ALTER TABLE "DSO_SCORE"
@@ -471,7 +471,7 @@ if run:
         try:
 
             status_text.info("Preparing upload records...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             records = sql_df[
                 sql_df[new_col].notna()
@@ -497,7 +497,7 @@ if run:
         try:
 
             status_text.info("Uploading data...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             batch_size = 500
 
@@ -535,7 +535,7 @@ if run:
                 )
 
             status_text.success("Upload Complete")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
         except Exception as e:
 
@@ -553,14 +553,14 @@ if run:
         try:
 
             status_text.info("Closing database connection...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             cur.close()
 
             conn.close()
 
             status_text.success("Connection Closed")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
         except Exception as e:
 
@@ -574,7 +574,7 @@ if run:
         try:
 
             status_text.info("Preparing final download file...")
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             all_download_rows = []
 
