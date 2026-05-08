@@ -174,131 +174,14 @@ master_df = st.session_state.master_df
 dso_columns = st.session_state.dso_columns
 
 # =========================
-# SIDEBAR STATUS PANEL
-# =========================
-
-with st.sidebar:
-
-    st.title("System Status")
-
-    # =========================
-    # Supabase STATUS
-    # =========================
-
-    try:
-
-        supabase.auth.get_session()
-    
-        st.success("Supabase API: Running")
-    
-    except:
-    
-        st.error("Supabase API: Unreachable")
-
-    # =========================
-    # DATABASE STATUS
-    # =========================
-
-    try:
-
-        test_response = (
-            supabase
-            .table("DSO_SCORE")
-            .select("key")
-            .limit(1)
-            .execute()
-        )
-
-        st.success("Database: Connected")
-
-    except Exception as e:
-
-        error_text = str(e).lower()
-
-        if "paused" in error_text:
-
-            st.error(
-                """
-                Database Status: Paused
-
-                Please activate the database below:
-                """
-            )
-
-            st.markdown(
-                """
-                [Open Supabase Dashboard](https://supabase.com/dashboard/project/fzlfedubjblnhrivxvlw)
-                """
-            )
-
-        else:
-
-            st.error(
-                f"Database Connection Failed"
-            )
-
-    # =========================
-    # TOTAL RECORDS
-    # =========================
-
-    try:
-
-        st.info(
-            f"Total Records: {len(master_df):,}"
-        )
-
-    except:
-        pass
-
-    # =========================
-    # TOTAL DSO MONTHS
-    # =========================
-
-    try:
-
-        st.info(
-            f"DSO Months: {len(dso_columns)}"
-        )
-
-    except:
-        pass
-
-    # =========================
-    # ACTIVE BASE COLUMN
-    # =========================
-
-    try:
-
-        st.info(
-            f"Base Column:\n{st.session_state.base_column}"
-        )
-
-    except:
-        pass
-
-    # =========================
-    # LAST AVAILABLE MONTH
-    # =========================
-
-    try:
-
-        latest_month = sorted(dso_columns)[-1]
-
-        st.info(
-            f"Latest DSO:\n{latest_month}"
-        )
-
-    except:
-        pass
-
-# =========================
 # TABS
 # =========================
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Download Report",
     "Upload Data",
     "Admin Controls",
+    "System Status",
     "Guidelines"
 ])
 
@@ -967,10 +850,98 @@ with tab3:
 
 
 # =========================================================
-# TAB 4 - GUIDELINES
+# TAB 4 - SYSTEM STATUS
 # =========================================================
 
 with tab4:
+
+    st.subheader("System Status")
+
+    # =========================
+    # SUPABASE STATUS
+    # =========================
+
+    try:
+
+        supabase.auth.get_session()
+
+        st.success("Supabase API: Running")
+
+    except:
+
+        st.error("Supabase API: Unreachable")
+
+    # =========================
+    # DATABASE STATUS
+    # =========================
+
+    try:
+
+        test_response = (
+            supabase
+            .table("DSO_SCORE")
+            .select("key")
+            .limit(1)
+            .execute()
+        )
+
+        st.success("Database: Connected")
+
+    except Exception as e:
+
+        error_text = str(e).lower()
+
+        if "paused" in error_text:
+
+            st.error(
+                """
+                Database Status: Paused
+
+                Please activate the database below:
+                """
+            )
+
+            st.markdown(
+                """
+                [Open Supabase Dashboard](https://supabase.com/dashboard/project/fzlfedubjblnhrivxvlw)
+                """
+            )
+
+        else:
+
+            st.error("Database Connection Failed")
+
+    # =========================
+    # SYSTEM INFO
+    # =========================
+
+    st.info(
+        f"Total Records: {len(master_df):,}"
+    )
+
+    st.info(
+        f"DSO Months: {len(dso_columns)}"
+    )
+
+    st.info(
+        f"Base Column: {st.session_state.base_column}"
+    )
+
+    try:
+
+        latest_month = sorted(dso_columns)[-1]
+
+        st.info(
+            f"Latest DSO: {latest_month}"
+        )
+
+    except:
+        pass
+# =========================================================
+# TAB 5 - GUIDELINES
+# =========================================================
+
+with tab5:
 
     st.subheader("DSO Score Management Guidelines")
 
