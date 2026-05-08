@@ -177,23 +177,19 @@ dso_columns = st.session_state.dso_columns
 # TABS
 # =========================
 
-selected_tab = st.segmented_control(
-    "Navigation",
-    [
+tab1, tab2, tab3, tab4 = st.tabs([
         "Download Report",
         "Upload Data",
         "Admin Controls",
-        "System Status",
         "Guidelines"
-    ],
-    default="Download Report"
+    ]
 )
 
 # =========================================================
 # TAB 1 - DOWNLOAD REPORT
 # =========================================================
 
-if selected_tab == "Download Report":
+with tab1:
 
     st.subheader("Download Final Report")
 
@@ -356,7 +352,7 @@ if selected_tab == "Download Report":
 # TAB 2 - UPLOAD DATA
 # =========================================================
 
-if selected_tab == "Upload Data":
+with tab2:
 
     st.subheader("Upload New DSO Data")
 
@@ -708,13 +704,13 @@ if selected_tab == "Upload Data":
 # TAB 3 - ADMIN CONTROLS
 # =========================================================
 
-if selected_tab == "Admin Controls":
-
+with tab3:
+    
     if "admin_refreshed" not in st.session_state:
 
         st.session_state.admin_refreshed = True
-        del st.session_state.master_df
-        del st.session_state.dso_columns
+        st.session_state.pop("master_df", None)
+        st.session_state.pop("dso_columns", None)
         st.rerun()
 
     st.subheader("Admin Controls")
@@ -755,8 +751,8 @@ if selected_tab == "Admin Controls":
             st.success(
                 f"Base column updated to {selected_base}"
             )
-            del st.session_state.master_df
-            del st.session_state.dso_columns
+            st.session_state.pop("master_df", None)
+            st.session_state.pop("dso_columns", None)
             st.rerun()
 
     # =========================
@@ -804,8 +800,8 @@ if selected_tab == "Admin Controls":
                 st.success(
                     f"{delete_col} deleted successfully."
                 )
-                del st.session_state.master_df
-                del st.session_state.dso_columns
+                st.session_state.pop("master_df", None)
+                st.session_state.pop("dso_columns", None)
                 st.rerun()
 
             except Exception as e:
@@ -854,98 +850,10 @@ if selected_tab == "Admin Controls":
 
 
 # =========================================================
-# TAB 4 - SYSTEM STATUS
+# TAB 4 - GUIDELINES
 # =========================================================
 
-if selected_tab == "System Status":
-
-    st.subheader("System Status")
-
-    # =========================
-    # SUPABASE STATUS
-    # =========================
-
-    try:
-
-        supabase.auth.get_session()
-
-        st.success("Supabase API: Running")
-
-    except:
-
-        st.error("Supabase API: Unreachable")
-
-    # =========================
-    # DATABASE STATUS
-    # =========================
-
-    try:
-
-        test_response = (
-            supabase
-            .table("DSO_SCORE")
-            .select("key")
-            .limit(1)
-            .execute()
-        )
-
-        st.success("Database: Connected")
-
-    except Exception as e:
-
-        error_text = str(e).lower()
-
-        if "paused" in error_text:
-
-            st.error(
-                """
-                Database Status: Paused
-
-                Please activate the database below:
-                """
-            )
-
-            st.markdown(
-                """
-                [Open Supabase Dashboard](https://supabase.com/dashboard/project/fzlfedubjblnhrivxvlw)
-                """
-            )
-
-        else:
-
-            st.error("Database Connection Failed")
-
-    # =========================
-    # SYSTEM INFO
-    # =========================
-
-    st.info(
-        f"Total Records: {len(master_df):,}"
-    )
-
-    st.info(
-        f"DSO Months: {len(dso_columns)}"
-    )
-
-    st.info(
-        f"Base Column: {st.session_state.base_column}"
-    )
-
-    try:
-
-        latest_month = sorted(dso_columns)[-1]
-
-        st.info(
-            f"Latest DSO: {latest_month}"
-        )
-
-    except:
-        pass
-# =========================================================
-# TAB 5 - GUIDELINES
-# =========================================================
-
-if selected_tab == "Guidelines":
+with tab4:
     st.subheader("DSO Score Management Guidelines")
 
     st.markdown("""
@@ -1032,12 +940,4 @@ if selected_tab == "Guidelines":
     Resets all Total Scores to 100.
     """)
 
-# =========================
-# CLOSE CONNECTIONS
-# =========================
 
-try:
-    cur.close()
-    conn.close()
-except:
-    pass
