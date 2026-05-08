@@ -137,37 +137,41 @@ def calculate_range(old_bucket, current_dso):
 # FETCH MASTER DATA
 # =========================
 
-try:
+if "master_df" not in st.session_state:
 
-    all_rows = []
+    try:
 
-    for start in range(0, 100000, 1000):
+        all_rows = []
 
-        response = (
-            supabase
-            .table("DSO_SCORE")
-            .select("*")
-            .range(start, start + 999)
-            .execute()
-        )
+        for start in range(0, 100000, 1000):
 
-        if not response.data:
-            break
+            response = (
+                supabase
+                .table("DSO_SCORE")
+                .select("*")
+                .range(start, start + 999)
+                .execute()
+            )
 
-        all_rows.extend(response.data)
+            if not response.data:
+                break
 
-    master_df = pd.DataFrame(all_rows)
+            all_rows.extend(response.data)
 
-    dso_columns = sorted([
-        col for col in master_df.columns
-        if col.startswith("DSO_")
-    ])
+        st.session_state.master_df = pd.DataFrame(all_rows)
 
-except Exception as e:
+        st.session_state.dso_columns = sorted([
+            col for col in st.session_state.master_df.columns
+            if col.startswith("DSO_")
+        ])
 
-    st.error(f"Error loading database: {e}")
-    st.stop()
+    except Exception as e:
 
+        st.error(f"Error loading database: {e}")
+        st.stop()
+
+master_df = st.session_state.master_df
+dso_columns = st.session_state.dso_columns
 
 # =========================
 # SIDEBAR STATUS PANEL
@@ -178,10 +182,18 @@ with st.sidebar:
     st.title("System Status")
 
     # =========================
-    # STREAMLIT STATUS
+    # Supabase STATUS
     # =========================
 
-    st.success("Streamlit App: Running")
+    try:
+
+        supabase.auth.get_session()
+    
+        st.success("Supabase API: Running")
+    
+    except:
+    
+        st.error("Supabase API: Unreachable")
 
     # =========================
     # DATABASE STATUS
@@ -215,7 +227,7 @@ with st.sidebar:
 
             st.markdown(
                 """
-                [Open Supabase Dashboard](https://supabase.com/dashboard/projects)
+                [Open Supabase Dashboard](https://supabase.com/dashboard/project/fzlfedubjblnhrivxvlw)
                 """
             )
 
@@ -452,7 +464,7 @@ with tab2:
     st.caption("Required Columns: Cluster, Customer Code, DSO")
 
     selected_month = st.date_input(
-        "Select Reporting Month(Choose Any Month Of the Month Of Updating DSO)"
+        "Select Month (Choose Any Date within the Month Of Updating DSO)"
     )
 
     run = st.button("Run Upload")
@@ -717,6 +729,7 @@ with tab2:
                 cur.execute(query)
 
                 conn.commit()
+                time.sleep(7)
 
                 status_text.success("Column Ready")
 
@@ -793,6 +806,13 @@ with tab2:
 
 with tab3:
 
+    if "admin_refreshed" not in st.session_state:
+
+        st.session_state.admin_refreshed = True
+        del st.session_state.master_df
+        del st.session_state.dso_columns
+        st.rerun()
+
     st.subheader("Admin Controls")
 
     st.warning(
@@ -831,7 +851,8 @@ with tab3:
             st.success(
                 f"Base column updated to {selected_base}"
             )
-
+            del st.session_state.master_df
+            del st.session_state.dso_columns
             st.rerun()
 
     # =========================
@@ -879,7 +900,8 @@ with tab3:
                 st.success(
                     f"{delete_col} deleted successfully."
                 )
-
+                del st.session_state.master_df
+                del st.session_state.dso_columns
                 st.rerun()
 
             except Exception as e:
