@@ -452,7 +452,7 @@ with tab2:
     st.caption("Required Columns: Cluster, Customer Code, DSO")
 
     selected_month = st.date_input(
-        "Select Reporting Month(Choose Any Month Of the Month Of Updating DSO"
+        "Select Reporting Month(Choose Any Month Of the Month Of Updating DSO)"
     )
 
     run = st.button("Run Upload")
@@ -471,10 +471,7 @@ with tab2:
 
             try:
 
-                parsed_date = pd.to_datetime(
-                    selected_month,
-                    format="%m/%Y"
-                )
+                parsed_date = pd.to_datetime(selected_month)
 
                 monthh = parsed_date.month
                 yearr = parsed_date.year
