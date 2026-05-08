@@ -318,7 +318,24 @@ with tab1:
 
             status.info("Preparing report...")
 
-            download_df = master_df.copy()
+            all_download_rows = []
+
+            for start in range(0, 100000, 1000):
+            
+                response = (
+                    supabase
+                    .table("DSO_SCORE")
+                    .select("*")
+                    .range(start, start + 999)
+                    .execute()
+                )
+            
+                if not response.data:
+                    break
+            
+                all_download_rows.extend(response.data)
+            
+            download_df = pd.DataFrame(all_download_rows)
 
             # =========================
             # CREATE BUCKETS
