@@ -13,20 +13,27 @@ st.title("DSO Score Management System")
 # CONNECTIONS
 # =========================
 
-url = st.secrets["SUPABASE_URL"]
-key = st.secrets["SUPABASE_KEY"]
+try:
 
-supabase = create_client(url, key)
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
 
-conn = psycopg2.connect(
-    host=st.secrets["PG_HOST"],
-    database=st.secrets["PG_DATABASE"],
-    user=st.secrets["PG_USER"],
-    password=st.secrets["PG_PASSWORD"],
-    port=st.secrets["PG_PORT"]
-)
+    supabase = create_client(url, key)
 
-cur = conn.cursor()
+    conn = psycopg2.connect(
+        host=st.secrets["PG_HOST"],
+        database=st.secrets["PG_DATABASE"],
+        user=st.secrets["PG_USER"],
+        password=st.secrets["PG_PASSWORD"],
+        port=st.secrets["PG_PORT"]
+    )
+
+    cur = conn.cursor()
+
+except Exception as e:
+
+    st.error(f"Connection Error: {e}")
+    st.stop()
 
 # =========================
 # SESSION STATE
@@ -130,38 +137,157 @@ def calculate_range(old_bucket, current_dso):
 # FETCH MASTER DATA
 # =========================
 
-all_rows = []
+try:
 
-for start in range(0, 100000, 1000):
+    all_rows = []
 
-    response = (
-        supabase
-        .table("DSO_SCORE")
-        .select("*")
-        .range(start, start + 999)
-        .execute()
-    )
+    for start in range(0, 100000, 1000):
 
-    if not response.data:
-        break
+        response = (
+            supabase
+            .table("DSO_SCORE")
+            .select("*")
+            .range(start, start + 999)
+            .execute()
+        )
 
-    all_rows.extend(response.data)
+        if not response.data:
+            break
 
-master_df = pd.DataFrame(all_rows)
+        all_rows.extend(response.data)
 
-dso_columns = sorted([
-    col for col in master_df.columns
-    if col.startswith("DSO_")
-])
+    master_df = pd.DataFrame(all_rows)
+
+    dso_columns = sorted([
+        col for col in master_df.columns
+        if col.startswith("DSO_")
+    ])
+
+except Exception as e:
+
+    st.error(f"Error loading database: {e}")
+    st.stop()
+
+
+# =========================
+# SIDEBAR STATUS PANEL
+# =========================
+
+with st.sidebar:
+
+    st.title("System Status")
+
+    # =========================
+    # STREAMLIT STATUS
+    # =========================
+
+    st.success("Streamlit App: Running")
+
+    # =========================
+    # DATABASE STATUS
+    # =========================
+
+    try:
+
+        test_response = (
+            supabase
+            .table("DSO_SCORE")
+            .select("key")
+            .limit(1)
+            .execute()
+        )
+
+        st.success("Database: Connected")
+
+    except Exception as e:
+
+        error_text = str(e).lower()
+
+        if "paused" in error_text:
+
+            st.error(
+                """
+                Database Status: Paused
+
+                Please activate the database below:
+                """
+            )
+
+            st.markdown(
+                """
+                [Open Supabase Dashboard](https://supabase.com/dashboard/projects)
+                """
+            )
+
+        else:
+
+            st.error(
+                f"Database Connection Failed"
+            )
+
+    # =========================
+    # TOTAL RECORDS
+    # =========================
+
+    try:
+
+        st.info(
+            f"Total Records: {len(master_df):,}"
+        )
+
+    except:
+        pass
+
+    # =========================
+    # TOTAL DSO MONTHS
+    # =========================
+
+    try:
+
+        st.info(
+            f"DSO Months: {len(dso_columns)}"
+        )
+
+    except:
+        pass
+
+    # =========================
+    # ACTIVE BASE COLUMN
+    # =========================
+
+    try:
+
+        st.info(
+            f"Base Column:\n{st.session_state.base_column}"
+        )
+
+    except:
+        pass
+
+    # =========================
+    # LAST AVAILABLE MONTH
+    # =========================
+
+    try:
+
+        latest_month = sorted(dso_columns)[-1]
+
+        st.info(
+            f"Latest DSO:\n{latest_month}"
+        )
+
+    except:
+        pass
 
 # =========================
 # TABS
 # =========================
 
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "Download Report",
     "Upload Data",
-    "Admin Controls"
+    "Admin Controls",
+    "Guidelines"
 ])
 
 # =========================================================
@@ -325,10 +451,8 @@ with tab2:
 
     st.caption("Required Columns: Cluster, Customer Code, DSO")
 
-    selected_month = st.text_input(
-        "Select Reporting Month",
-        value="03/2026",
-        placeholder="MM/YYYY"
+    selected_month = st.date_input(
+        "Select Reporting Month(Choose Any Month Of the Month Of Updating DSO"
     )
 
     run = st.button("Run Upload")
@@ -360,7 +484,7 @@ with tab2:
 
             except:
 
-                st.error("Enter month in MM/YYYY format.")
+                st.error("Error processing selected date.")
                 st.stop()
 
             # =========================
@@ -391,6 +515,17 @@ with tab2:
                     all_rows.extend(response.data)
 
                 sql_df = pd.DataFrame(all_rows)
+                if new_col in sql_df.columns:
+                
+                    st.error(
+                        f"""
+                        {new_col} already exists in database.
+                
+                        Upload for this month has already been completed.
+                        """
+                    )
+                
+                    st.stop()
 
             except Exception as e:
 
@@ -442,6 +577,32 @@ with tab2:
                 status_text.info("Preparing data...")
                 time.sleep(0.2)
 
+                DSO["Customer Code"] = pd.to_numeric(
+                    DSO["Customer Code"],
+                    errors="coerce"
+                )
+                
+                invalid_customer_codes = (
+                    DSO["Customer Code"]
+                    .isna()
+                    .sum()
+                )
+                
+                if invalid_customer_codes > 0:
+                
+                    st.error(
+                        f"""
+                        Invalid Customer Code values found.
+                
+                        Total Invalid Rows:
+                        {invalid_customer_codes}
+                
+                        Please check the uploaded file.
+                        """
+                    )
+                
+                    st.stop()
+                
                 DSO["Customer Code"] = (
                     DSO["Customer Code"]
                     .astype(int)
@@ -666,21 +827,15 @@ with tab3:
             """
         )
 
-        confirm_base = st.checkbox(
-            f"Confirm changing base column to {selected_base}"
-        )
+        if st.button("Update Base Column"):
 
-        if confirm_base:
+            st.session_state.base_column = selected_base
 
-            if st.button("Update Base Column"):
+            st.success(
+                f"Base column updated to {selected_base}"
+            )
 
-                st.session_state.base_column = selected_base
-
-                st.success(
-                    f"Base column updated to {selected_base}"
-                )
-
-                st.rerun()
+            st.rerun()
 
     # =========================
     # DELETE DSO COLUMN
@@ -711,34 +866,28 @@ with tab3:
             """
         )
 
-        confirm_delete = st.checkbox(
-            f"Confirm deletion of {delete_col}"
-        )
+        if st.button("Delete Column"):
 
-        if confirm_delete:
+            try:
 
-            if st.button("Delete Column"):
+                query = f'''
+                ALTER TABLE "DSO_SCORE"
+                DROP COLUMN IF EXISTS "{delete_col}";
+                '''
 
-                try:
+                cur.execute(query)
 
-                    query = f'''
-                    ALTER TABLE "DSO_SCORE"
-                    DROP COLUMN IF EXISTS "{delete_col}";
-                    '''
+                conn.commit()
 
-                    cur.execute(query)
+                st.success(
+                    f"{delete_col} deleted successfully."
+                )
 
-                    conn.commit()
+                st.rerun()
 
-                    st.success(
-                        f"{delete_col} deleted successfully."
-                    )
+            except Exception as e:
 
-                    st.rerun()
-
-                except Exception as e:
-
-                    st.error(f"Error: {e}")
+                st.error(f"Error: {e}")
 
     # =========================
     # RESET TOTAL SCORE
@@ -780,9 +929,105 @@ with tab3:
 
                 st.error(f"Error: {e}")
 
+
+# =========================================================
+# TAB 4 - GUIDELINES
+# =========================================================
+
+with tab4:
+
+    st.subheader("DSO Score Management Guidelines")
+
+    st.markdown("""
+    ## Upload Instructions
+
+    Before uploading data, ensure the CSV file contains:
+
+    - Cluster
+    - Customer Code
+    - DSO
+
+    ### Important Notes
+
+    - Customer Code must contain only numeric values
+    - Duplicate monthly uploads are not allowed
+    - Uploading an already existing DSO month will be blocked
+    - Base DSO column affects:
+        - Impact calculations
+        - Range calculations
+        - Future uploads
+
+    ---
+
+    ## Upload Process
+
+    1. Go to the **Upload Data** tab
+    2. Upload the CSV file
+    3. Select the reporting month
+    4. Click **Run Upload**
+    5. Wait for upload completion
+    6. Download report from **Download Report** tab
+
+    ---
+
+    ## What This Tool Does
+
+    - Uploads latest customer DSO data
+    - Dynamically creates DSO buckets
+    - Calculates customer movement impact
+    - Calculates movement range
+    - Updates total score values
+    - Pushes updated records into Supabase
+
+    ---
+
+    ## Financial Logic
+
+    ### Bucket Classification
+
+    - < 45 days
+    - 46–60 days
+    - 61–90 days
+    - > 90 days
+
+    ### Impact Logic
+
+    Customers moving to better buckets receive positive impact.
+
+    Customers moving to worse buckets receive negative impact.
+
+    ### Range Logic
+
+    Based on:
+    - Base bucket
+    - Current DSO
+
+    ### Total Score Formula
+
+    Total Score = Existing Total Score + Impact Score
+
+    ---
+
+    ## Admin Controls
+
+    ### Base Column
+    Used as the reference bucket for:
+    - Impact calculations
+    - Range calculations
+
+    ### Delete DSO Column
+    Permanently removes a DSO month from database.
+
+    ### Reset Total Score
+    Resets all Total Scores to 100.
+    """)
+
 # =========================
 # CLOSE CONNECTIONS
 # =========================
 
-cur.close()
-conn.close()
+try:
+    cur.close()
+    conn.close()
+except:
+    pass
