@@ -177,19 +177,23 @@ dso_columns = st.session_state.dso_columns
 # TABS
 # =========================
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "Download Report",
-    "Upload Data",
-    "Admin Controls",
-    "System Status",
-    "Guidelines"
-])
+selected_tab = st.segmented_control(
+    "Navigation",
+    [
+        "Download Report",
+        "Upload Data",
+        "Admin Controls",
+        "System Status",
+        "Guidelines"
+    ],
+    default="Download Report"
+)
 
 # =========================================================
 # TAB 1 - DOWNLOAD REPORT
 # =========================================================
 
-with tab1:
+if selected_tab == "Download Report":
 
     st.subheader("Download Final Report")
 
@@ -352,7 +356,7 @@ with tab1:
 # TAB 2 - UPLOAD DATA
 # =========================================================
 
-with tab2:
+if selected_tab == "Upload Data":
 
     st.subheader("Upload New DSO Data")
 
@@ -704,7 +708,7 @@ with tab2:
 # TAB 3 - ADMIN CONTROLS
 # =========================================================
 
-with tab3:
+if selected_tab == "Admin Controls":
 
     if "admin_refreshed" not in st.session_state:
 
@@ -853,7 +857,7 @@ with tab3:
 # TAB 4 - SYSTEM STATUS
 # =========================================================
 
-with tab4:
+if selected_tab == "System Status":
 
     st.subheader("System Status")
 
@@ -941,8 +945,7 @@ with tab4:
 # TAB 5 - GUIDELINES
 # =========================================================
 
-with tab5:
-
+if selected_tab == "Guidelines":
     st.subheader("DSO Score Management Guidelines")
 
     st.markdown("""
