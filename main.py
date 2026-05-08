@@ -4,8 +4,6 @@ import numpy as np
 import psycopg2
 import time
 from supabase import create_client
-import streamlit_ant_design_components as sac
-
 
 st.set_page_config(layout="wide")
 
@@ -18,9 +16,8 @@ uploaded_file = st.file_uploader(
 
 st.caption("Required Columns: Cluster, Customer Code, DSO")
 
-selected_month = sac.date_picker(
-    label='Select Month',
-    picker='month'
+selected_date = st.date_input(
+    "Select Date (Select any date in the month of current DSO)"
 )
 
 run = st.button("Run")
