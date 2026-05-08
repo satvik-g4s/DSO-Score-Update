@@ -219,12 +219,16 @@ with tab1:
                 all_download_rows.extend(response.data)
             
             download_df = pd.DataFrame(all_download_rows)
+            latest_dso_columns = sorted([
+                col for col in download_df.columns
+                if col.startswith("DSO_")
+            ])
 
             # =========================
             # CREATE BUCKETS
             # =========================
 
-            for dso_col in dso_columns:
+            for dso_col in latest_dso_columns:
 
                 suffix = dso_col.replace("DSO_", "")
 
@@ -243,7 +247,7 @@ with tab1:
                 f'Bucket_{st.session_state.base_column.replace("DSO_", "")}'
             )
 
-            for dso_col in dso_columns:
+            for dso_col in latest_dso_columns:
 
                 if dso_col == st.session_state.base_column:
                     continue
@@ -289,7 +293,7 @@ with tab1:
 
             ordered_cols.extend(base_cols)
 
-            for i, dso_col in enumerate(dso_columns):
+            for i, dso_col in enumerate(latest_dso_columns):
 
                 suffix = dso_col.replace("DSO_", "")
 
@@ -695,6 +699,168 @@ with tab2:
                     )
 
                 status_text.success("Upload Complete")
+                # =========================
+                # REFRESH SESSION CACHE
+                # =========================
+
+                st.session_state.pop("master_df", None)
+                st.session_state.pop("dso_columns", None)
+
+                # =========================
+                # PREPARE FINAL REPORT
+                # =========================
+
+                status_text.info("Preparing final report...")
+
+                all_download_rows = []
+
+                for start in range(0, 100000, 1000):
+
+                    response = (
+                        supabase
+                        .table("DSO_SCORE")
+                        .select("*")
+                        .range(start, start + 999)
+                        .execute()
+                    )
+
+                    if not response.data:
+                        break
+
+                    all_download_rows.extend(response.data)
+
+                download_df = pd.DataFrame(all_download_rows)
+
+                latest_dso_columns = sorted([
+                    col for col in download_df.columns
+                    if col.startswith("DSO_")
+                ])
+
+                # =========================
+                # CREATE BUCKETS
+                # =========================
+
+                for dso_col in latest_dso_columns:
+
+                    suffix = dso_col.replace("DSO_", "")
+
+                    bucket_col = f"Bucket_{suffix}"
+
+                    download_df[bucket_col] = (
+                        download_df[dso_col]
+                        .apply(create_bucket)
+                    )
+
+                # =========================
+                # CREATE IMPACT + RANGE
+                # =========================
+
+                baseline_bucket_col = (
+                    f'Bucket_{st.session_state.base_column.replace("DSO_", "")}'
+                )
+
+                for dso_col in latest_dso_columns:
+
+                    if dso_col == st.session_state.base_column:
+                        continue
+
+                    suffix = dso_col.replace("DSO_", "")
+
+                    current_bucket_col = f"Bucket_{suffix}"
+
+                    impact_col = f"Impact_{suffix}"
+                    range_col = f"Range_{suffix}"
+
+                    download_df[impact_col] = download_df.apply(
+                        lambda row: calculate_impact(
+                            row[baseline_bucket_col],
+                            row[current_bucket_col]
+                        ),
+                        axis=1
+                    )
+
+                    download_df[range_col] = download_df.apply(
+                        lambda row: calculate_range(
+                            row[baseline_bucket_col],
+                            row[dso_col]
+                        ),
+                        axis=1
+                    )
+
+                # =========================
+                # COLUMN ORDERING
+                # =========================
+
+                ordered_cols = []
+
+                base_cols = [
+                    col for col in [
+                        "HUB",
+                        "key",
+                        "Customer Code",
+                        "Cluster"
+                    ]
+                    if col in download_df.columns
+                ]
+
+                ordered_cols.extend(base_cols)
+
+                for dso_col in latest_dso_columns:
+
+                    suffix = dso_col.replace("DSO_", "")
+
+                    bucket_col = f"Bucket_{suffix}"
+
+                    ordered_cols.append(dso_col)
+                    ordered_cols.append(bucket_col)
+
+                    if dso_col != st.session_state.base_column:
+
+                        impact_col = f"Impact_{suffix}"
+                        range_col = f"Range_{suffix}"
+
+                        if impact_col in download_df.columns:
+                            ordered_cols.append(impact_col)
+
+                        if range_col in download_df.columns:
+                            ordered_cols.append(range_col)
+
+                remaining_cols = [
+                    col for col in download_df.columns
+                    if col not in ordered_cols
+                    and col != "Total Score"
+                ]
+
+                ordered_cols.extend(remaining_cols)
+
+                if "Total Score" in download_df.columns:
+                    ordered_cols.append("Total Score")
+
+                download_df = download_df[ordered_cols]
+
+                if "Total Score" in download_df.columns:
+
+                    download_df = download_df.sort_values(
+                        by="Total Score",
+                        ascending=False
+                    )
+
+                csv_output = (
+                    download_df
+                    .to_csv(index=False)
+                    .encode("utf-8")
+                )
+
+                status_text.success(
+                    "Upload Complete - Report Ready"
+                )
+
+                st.download_button(
+                    label="Download Updated Report",
+                    data=csv_output,
+                    file_name="dso_score_output.csv",
+                    mime="text/csv"
+                )
 
             except Exception as e:
 
@@ -706,14 +872,29 @@ with tab2:
 
 with tab3:
     
-    if "admin_refreshed" not in st.session_state:
-
-        st.session_state.admin_refreshed = True
-        st.session_state.pop("master_df", None)
-        st.session_state.pop("dso_columns", None)
-        st.rerun()
-
     st.subheader("Admin Controls")
+    try:
+    
+        admin_response = (
+            supabase
+            .table("DSO_SCORE")
+            .select("*")
+            .limit(1)
+            .execute()
+        )
+    
+        admin_df = pd.DataFrame(admin_response.data)
+    
+        admin_dso_columns = sorted([
+            col for col in admin_df.columns
+            if col.startswith("DSO_")
+        ])
+    
+    except Exception as e:
+    
+        st.error(f"Error refreshing admin data: {e}")
+    
+        admin_dso_columns = dso_columns
 
     st.warning(
         "These operations permanently modify the database."
@@ -725,8 +906,8 @@ with tab3:
 
     selected_base = st.selectbox(
         "Select Base DSO Column",
-        dso_columns,
-        index=dso_columns.index(
+        admin_dso_columns,
+        index=admin_dso_columns.index(
             st.session_state.base_column
         )
     )
@@ -752,7 +933,6 @@ with tab3:
                 f"Base column updated to {selected_base}"
             )
             st.session_state.pop("master_df", None)
-            st.session_state.pop("dso_columns", None)
             st.rerun()
 
     # =========================
@@ -762,7 +942,7 @@ with tab3:
     st.divider()
 
     deletable_columns = [
-        col for col in dso_columns
+        col for col in admin_dso_columns
         if col != st.session_state.base_column
     ]
 
@@ -801,7 +981,7 @@ with tab3:
                     f"{delete_col} deleted successfully."
                 )
                 st.session_state.pop("master_df", None)
-                st.session_state.pop("dso_columns", None)
+                st.session_state.pop("admin_dso_columns", None)
                 st.rerun()
 
             except Exception as e:
